@@ -1,0 +1,8 @@
+config.json
+logs.txt
+
+__pycache__/
+build/
+dist/
+
+*.pyc
