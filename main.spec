@@ -6,7 +6,11 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=[
+    'plyer.platforms.win.notification',
+    'plyer.platforms.win',
+    'plyer',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

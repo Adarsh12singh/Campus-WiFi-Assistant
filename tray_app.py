@@ -25,16 +25,28 @@ def resume_monitoring(icon, item):
 
 
 def open_logs(icon, item):
+
     try:
-        os.startfile("logs.txt")
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        os.startfile(os.path.join(base_dir, "logs.txt"))
+
     except Exception as e:
+
         print(f"Unable To Open Logs: {e}")
 
 
 def open_config(icon, item):
+
     try:
-        os.startfile("config.json")
+
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        os.startfile(os.path.join(base_dir, "config.json"))
+
     except Exception as e:
+
         print(f"Unable To Open Config: {e}")
 
 
