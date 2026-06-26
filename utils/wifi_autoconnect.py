@@ -1,5 +1,5 @@
 import subprocess
-from notification_manager import show_notification
+from ui.notification_manager import show_notification
 
 def connect_to_wifi(ssid):
 

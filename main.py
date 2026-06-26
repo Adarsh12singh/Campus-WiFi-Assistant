@@ -4,10 +4,10 @@ import threading
 from wifi_monitor import connection_status
 from portal_login import login_to_portal
 from logger import write_log
-from wifi_name import get_current_wifi
-from wifi_autoconnect import connect_to_wifi
-from notification_manager import show_notification
-from tray_app import start_tray
+from utils.wifi_name import get_current_wifi
+from utils.wifi_autoconnect import connect_to_wifi
+from ui.notification_manager import show_notification
+from ui.tray_app import start_tray
 import app_state
 
 print("Campus WiFi Assistant Started")
@@ -134,6 +134,8 @@ while True:
             )
 
             try:
+
+                time.sleep(10)
 
                 login_to_portal()
 

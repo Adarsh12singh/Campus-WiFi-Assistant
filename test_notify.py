@@ -1,4 +1,4 @@
-from notification_manager import show_notification
+from ui.notification_manager import show_notification
 
 show_notification(
     "📶 Campus WiFi Assistant",
