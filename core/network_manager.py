@@ -1,53 +1,28 @@
 import time
-import requests
-import psutil
+
+from utils.wifi_name import get_current_wifi
+from core.portal_state import login_required
+
+TARGET_WIFI = "OU Hostels"
 
 
 def wifi_connected():
-    stats = psutil.net_if_stats()
-
-    for interface, data in stats.items():
-        if data.isup:
-            return True
-
-    return False
+    """
+    Returns True only if connected to the target hostel WiFi.
+    """
+    return get_current_wifi() == TARGET_WIFI
 
 
-def internet_available():
-
-    try:
-        requests.get(
-            "https://clients3.google.com/generate_204",
-            timeout=5
-        )
-        return True
-
-    except:
-        return False
-
-
-def wait_for_stable_network(seconds=20):
+def wait_for_stable_network(timeout=60):
 
     start = time.time()
 
-    while time.time() - start < seconds:
+    while time.time() - start < timeout:
 
-        if not wifi_connected():
-            return False
-
-        time.sleep(1)
-
-    return True
-
-
-def verify_connection(retries=3):
-
-    for _ in range(retries):
-
-        if internet_available():
+        if wifi_connected():
             return True
 
-        time.sleep(3)
+        time.sleep(2)
 
     return False
 
@@ -57,7 +32,15 @@ def connection_status():
     if not wifi_connected():
         return "WIFI_DISCONNECTED"
 
-    if verify_connection():
+    try:
+
+        if login_required():
+            return "CAPTIVE_PORTAL_OR_NO_INTERNET"
+
         return "CONNECTED"
 
-    return "CAPTIVE_PORTAL_OR_NO_INTERNET"
+    except Exception as e:
+
+        print("Portal State Error:", e)
+
+        return "CAPTIVE_PORTAL_OR_NO_INTERNET"

@@ -5,7 +5,9 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+    ('campus_wifi.png', '.'),
+    ],
     hiddenimports=[
     'plyer.platforms.win.notification',
     'plyer.platforms.win',

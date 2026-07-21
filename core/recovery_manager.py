@@ -19,11 +19,21 @@ def recover_connection():
 
             return True
 
-        if status == "CAPTIVE_PORTAL_OR_NO_INTERNET":
+    result = smart_login()
 
-            if smart_login():
+    if result == "SUCCESS":
 
-                return True
+        print("✓ Recovery Successful")
+        write_log("Recovery Successful")
+
+        return True
+
+    elif result == "DATA_LIMIT":
+
+        print("⚠ Data Limit Exceeded")
+        write_log("Data Limit Exceeded")
+
+        return False
 
         time.sleep(10)
 

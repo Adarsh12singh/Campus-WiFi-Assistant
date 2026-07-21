@@ -1,4 +1,8 @@
 {
+    "portal_url": "http://172.16.1.1:8090/httpclient.html",
     "username": "YOUR_USERNAME",
-    "password": "YOUR_PASSWORD"
+    "password": "YOUR_PASSWORD",
+    "target_wifi": "OU Hostels",
+    "monitoring_enabled": true,
+    "wifi_autoconnect_enabled": true
 }

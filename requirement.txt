@@ -1,0 +1,7 @@
+playwright
+pystray
+Pillow
+plyer
+psutil
+requests
+pyinstaller
