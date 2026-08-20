@@ -1,0 +1,26 @@
+{
+    "id": "university_example",
+    "name": "University Campus WiFi",
+    "ssid": "Campus-WiFi",
+    "enabled": false,
+    "login_strategy": "http_post",
+    "portal_url": "http://10.10.0.1/login",
+    "post_data": {
+        "user_field": "username",
+        "pass_field": "password",
+        "extra_fields": {
+            "mode": "191"
+        }
+    },
+    "selectors": {
+        "username": "#user",
+        "password": "#pass",
+        "submit": "#submit_btn"
+    },
+    "data_limit_text": "quota exceeded",
+    "verification_url": "http://www.msftconnecttest.com/connecttest.txt",
+    "verification_expected": "Microsoft Connect Test",
+    "credential_id": "example_creds",
+    "retry_count": 3,
+    "retry_delay_seconds": 10
+}

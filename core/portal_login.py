@@ -1,90 +1,39 @@
-from playwright.sync_api import sync_playwright
+from core.profile_manager import get_profile_by_id
+from core.credential_manager import get_credential
+from core.strategies.playwright_strategy import PlaywrightStrategy
+from core.strategies.base import LoginResult
 
 
-def login_to_portal():
+def login_to_portal(profile=None, credentials=None):
+    """
+    Backward-compatible entry point for portal login.
+    Uses PlaywrightStrategy with the specified profile or default 'ou_hostels'.
+    """
+    if profile is None:
+        profile = get_profile_by_id("ou_hostels") or {
+            "id": "ou_hostels",
+            "name": "OU Hostels",
+            "ssid": "OU Hostels",
+            "portal_url": "http://172.16.1.1:8090/httpclient.html",
+            "selectors": {
+                "username": "#username",
+                "password": "#password",
+                "submit": "#loginbutton"
+            },
+            "data_limit_text": "data transfer has been exceeded",
+            "credential_id": "ou_hostels_creds"
+        }
 
-    print("===== LOGIN FUNCTION STARTED =====")
+    if credentials is None:
+        cred_id = profile.get("credential_id", "ou_hostels_creds")
+        credentials = get_credential(cred_id)
 
-    from core.config_manager import get_config
+    strategy = PlaywrightStrategy()
+    result = strategy.login(profile, credentials)
 
-    config = get_config()
-
-    username = config["username"]
-    password = config["password"]
-    portal_url = config["portal_url"]
-
-    print("Portal URL:", portal_url)
-
-    with sync_playwright() as p:
-
-        print("Launching Browser...")
-
-        browser = p.chromium.launch(
-            headless=False
-        )
-
-        page = browser.new_page()
-
-        try:
-
-            print("Opening Portal...")
-
-            page.goto(
-                portal_url,
-                wait_until="domcontentloaded",
-                timeout=30000
-            )
-
-            print("Portal Opened")
-
-            print("Waiting For Username Field...")
-
-            page.wait_for_selector(
-                "#username",
-                timeout=10000
-            )
-
-            print("Username Field Found")
-
-            page.fill("#username", username)
-            print("Username Filled")
-
-            page.fill("#password", password)
-            print("Password Filled")
-
-            print("Clicking Login Button...")
-
-            page.click("#loginbutton")
-
-            print("Login Button Clicked")
-
-            print("Waiting for portal to process login...")
-
-            page.wait_for_timeout(8000)
-
-            html = page.content().lower()
-
-            if "data transfer has been exceeded" in html:
-                print("DATA LIMIT DETECTED")
-                return "DATA_LIMIT"
-
-            # We don't decide success/failure here anymore.
-            # login_manager.py will verify internet availability.
-
-            print("LOGIN REQUEST SENT")
-
-            return "SUCCESS"
-
-        except Exception as e:
-
-            print("PORTAL LOGIN ERROR:", e)
-
-            return "FAILED"
-
-        finally:
-
-            print("Closing Browser...")
-
-            browser.close()
-
-            print("Browser Closed")
+    if result == LoginResult.DATA_LIMIT:
+        return "DATA_LIMIT"
+    elif result == LoginResult.SUCCESS:
+        return "SUCCESS"
+    else:
+        return "FAILED"

@@ -1,8 +1,12 @@
 config.json
+credentials.json
 logs.txt
+err.txt
+out.txt
 
 __pycache__/
 build/
 dist/
 
 *.pyc
+*.spec.bak

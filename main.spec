@@ -1,18 +1,33 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
 
+playwright_datas, playwright_binaries, playwright_hiddenimports = collect_all('playwright')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=playwright_binaries,
     datas=[
-    ('campus_wifi.png', '.'),
-    ],
+        ('campus_wifi.png', '.'),
+        ('profiles', 'profiles'),
+    ] + playwright_datas,
     hiddenimports=[
-    'plyer.platforms.win.notification',
-    'plyer.platforms.win',
-    'plyer',
-    ],
+        'plyer.platforms.win.notification',
+        'plyer.platforms.win',
+        'plyer',
+        'tkinter',
+        'tkinter.ttk',
+        'pystray',
+        'PIL',
+        'requests',
+        'core.strategies.playwright_strategy',
+        'core.strategies.http_strategy',
+        'core.strategies.factory',
+        'core.profile_manager',
+        'core.credential_manager',
+        'core.state_manager',
+        'ui.dashboard',
+    ] + playwright_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -28,7 +43,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='main',
+    name='CampusWiFiAssistant',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

@@ -1,0 +1,19 @@
+{
+    "id": "ou_hostels",
+    "name": "OU Hostels",
+    "ssid": "OU Hostels",
+    "enabled": true,
+    "login_strategy": "playwright",
+    "portal_url": "http://172.16.1.1:8090/httpclient.html",
+    "selectors": {
+        "username": "#username",
+        "password": "#password",
+        "submit": "#loginbutton"
+    },
+    "data_limit_text": "data transfer has been exceeded",
+    "verification_url": "http://www.msftconnecttest.com/connecttest.txt",
+    "verification_expected": "Microsoft Connect Test",
+    "credential_id": "ou_hostels_creds",
+    "retry_count": 3,
+    "retry_delay_seconds": 12
+}

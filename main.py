@@ -1,271 +1,212 @@
 import time
 import threading
 import os
+import sys
 
-from core.network_manager import (
-    connection_status,
-    wait_for_stable_network
+# MUST be set before any module below imports playwright.
+os.environ.setdefault(
+    "PLAYWRIGHT_BROWSERS_PATH",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright")
 )
-from core.config_manager import CONFIG_PATH
+
+import app_state
+from app_paths import get_app_dir
+from logger import write_log
 from core.state_manager import (
     set_state,
     get_state,
     STARTING,
-    WAITING_FOR_WIFI,
-    VERIFYING_NETWORK,
-    LOGIN_REQUIRED,
-    CONNECTED,
-    RECOVERY
+    DISCONNECTED,
+    WIFI_CONNECTING,
+    WIFI_CONNECTED,
+    CHECKING_INTERNET,
+    CAPTIVE_PORTAL,
+    AUTHENTICATING,
+    AUTHENTICATED,
+    INTERNET_CONNECTED,
+    DATA_LIMIT_EXCEEDED,
+    UNKNOWN_NETWORK
 )
+from core.config_manager import get_config, CONFIG_PATH
+from core.profile_manager import find_profile_by_ssid, load_all_profiles
+from core.credential_manager import CREDENTIALS_FILE
+from core.network_manager import connection_status, get_active_network_profile
 from core.login_manager import smart_login
-from logger import write_log
 from utils.wifi_name import get_current_wifi
 from utils.wifi_autoconnect import connect_to_wifi
 from ui.notification_manager import show_notification
 from ui.tray_app import start_tray
-import app_state
-
-print("Campus WiFi Assistant Started")
-set_state(STARTING)
-
-write_log("Application Started")
-
-show_notification(
-"📶 Campus WiFi Assistant",
-"🚀 Monitoring Started"
-)
-
-tray_thread = threading.Thread(
-target=start_tray,
-daemon=True
-)
-
-tray_thread.start()
-
-TARGET_WIFI = "OU Hostels"
-
-print("Waiting for stable network...")
-
-while True:
-
-    current_wifi = get_current_wifi()
-
-    if current_wifi == TARGET_WIFI:
-
-        print("Network Stable.")
-
-        break
-
-    print("Waiting for OU Hostels WiFi...")
-
-    connect_to_wifi(TARGET_WIFI)
-
-    time.sleep(5)
-
-last_login_attempt = 0
-last_status = None
-last_wifi = None
-
-data_limit_active = False
-data_limit_config_mtime = None
-data_limit_first_seen = 0
-DATA_LIMIT_FALLBACK_RETRY = 20 * 60  # retry anyway after 20 min, in case quota reset itself
 
 
-def get_config_mtime():
+def get_file_mtime(path):
     try:
-        return os.path.getmtime(CONFIG_PATH)
+        return os.path.getmtime(path)
     except OSError:
         return None
 
-while True:
 
-    if not app_state.monitoring_enabled:
-        time.sleep(2)
-        continue
+def network_monitor_loop():
+    """Background monitoring loop running on a dedicated worker thread."""
+    last_login_attempt = 0
+    last_status = None
+    last_wifi = None
 
-    current_wifi = get_current_wifi()
+    data_limit_active = False
+    data_limit_creds_mtime = None
+    data_limit_first_seen = 0
+    DATA_LIMIT_FALLBACK_RETRY = 20 * 60
 
-    # Auto connect if no WiFi connected
-    if not current_wifi:
+    while True:
+        try:
+            config = get_config()
+            interval = config.get("check_interval_seconds", 15)
 
-        set_state(WAITING_FOR_WIFI)
-
-        app_state.current_status = "No WiFi"
-
-        print("No WiFi Connected")
-
-        write_log("No WiFi Connected")
-
-        if connect_to_wifi(TARGET_WIFI):
-            write_log("Connection Requested")
-
-        time.sleep(15)
-
-        continue
-
-    # WiFi changed
-    if current_wifi != last_wifi:
-
-        write_log(f"Connected WiFi: {current_wifi}")
-
-        show_notification(
-            "📶 Campus WiFi Assistant",
-            f"📡 Connected to {current_wifi}"
-        )
-
-        last_wifi = current_wifi
-
-    # Ignore non-hostel WiFi
-    if current_wifi != TARGET_WIFI:
-
-        app_state.current_status = f"Using {current_wifi}"
-
-        print(f"Connected to {current_wifi} - Monitoring Disabled")
-
-        time.sleep(15)
-
-        continue
-
-    status = connection_status()
-    set_state(VERIFYING_NETWORK)
-
-    if status != last_status:
-
-        write_log(f"Status Changed: {status}")
-
-        if status == "CONNECTED":
-            set_state(CONNECTED)
-
-            app_state.current_status = "Connected"
-            print("STATUS =", app_state.current_status)
-
-            show_notification(
-                "📶 Campus WiFi Assistant",
-                "✅ Internet Connected"
-            )
-
-        elif status == "WIFI_DISCONNECTED":
-
-            app_state.current_status = "WiFi Disconnected"
-
-            show_notification(
-                "📶 Campus WiFi Assistant",
-                "❌ WiFi Disconnected"
-            )
-
-        elif status == "CAPTIVE_PORTAL_OR_NO_INTERNET":
-            set_state(LOGIN_REQUIRED)
-
-            app_state.current_status = "Login Required"
-
-            show_notification(
-                "📶 Campus WiFi Assistant",
-                "⚠ Login Required"
-            )
-
-        last_status = status
-
-    if status == "CONNECTED":
-        print("✓ Internet Connected")
-    elif status == "CAPTIVE_PORTAL_OR_NO_INTERNET":
-        current_time = time.time()
-
-        if data_limit_active:
-
-            current_mtime = get_config_mtime()
-
-            config_updated = (
-                current_mtime is not None
-                and data_limit_config_mtime is not None
-                and current_mtime != data_limit_config_mtime
-            )
-
-            timed_out = (current_time - data_limit_first_seen) > DATA_LIMIT_FALLBACK_RETRY
-
-            if not config_updated and not timed_out:
-                time.sleep(15)
+            if not app_state.monitoring_enabled:
+                app_state.current_status = "Monitoring Paused"
+                time.sleep(2)
                 continue
 
-            print("Retrying login (config changed or fallback timer reached)...")
-            data_limit_active = False
+            current_wifi = get_current_wifi()
+            app_state.current_ssid = current_wifi
 
-        if current_time - last_login_attempt > 60:
-            print("⚠ Portal Login Required")
+            # 1. No WiFi connected
+            if not current_wifi:
+                set_state(DISCONNECTED)
+                app_state.current_status = "No WiFi"
+                app_state.current_profile_name = None
 
-            set_state(LOGIN_REQUIRED)
+                if last_status != "WIFI_DISCONNECTED":
+                    write_log("No WiFi Connected")
+                    last_status = "WIFI_DISCONNECTED"
 
-            show_notification(
-                "📶 Campus WiFi Assistant",
-                "🔐 Logging into Portal..."
-            )
+                if config.get("wifi_autoconnect_enabled", True):
+                    pref_target = config.get("preferred_target_wifi", "OU Hostels")
+                    set_state(WIFI_CONNECTING)
+                    if connect_to_wifi(pref_target):
+                        write_log(f"Auto-connected to {pref_target}")
 
-            try:
-                result = smart_login()
-                last_login_attempt = current_time
+                time.sleep(interval)
+                continue
 
-                if result == "SUCCESS":
-                    print("✅ Login Successful")
-                time.sleep(10)
+            # 2. WiFi changed notification
+            if current_wifi != last_wifi:
+                write_log(f"Connected WiFi: {current_wifi}")
+                show_notification(
+                    "📶 Campus WiFi Assistant",
+                    f"📡 Connected to {current_wifi}"
+                )
+                last_wifi = current_wifi
 
-                status = connection_status()
+            # 3. Lookup matching Network Profile
+            active_profile = find_profile_by_ssid(current_wifi)
+
+            if not active_profile:
+                app_state.current_profile_name = None
+                app_state.current_status = f"Using {current_wifi} (Unmanaged)"
+                set_state(UNKNOWN_NETWORK)
+                time.sleep(interval)
+                continue
+
+            # Known managed profile
+            app_state.current_profile_name = active_profile.get("name", current_wifi)
+            status = connection_status(active_profile)
+
+            if status != last_status:
+                write_log(f"[{active_profile.get('name')}] Status Changed: {status}")
 
                 if status == "CONNECTED":
-
-                    print("Internet Verified")
-
-                    set_state(CONNECTED)
-
+                    set_state(INTERNET_CONNECTED)
                     app_state.current_status = "Connected"
-
-                    write_log("Portal Login Successful")
-
                     show_notification(
                         "📶 Campus WiFi Assistant",
-                        "✅ Internet Connected"
+                        f"✅ Internet Connected ({active_profile.get('name')})"
                     )
 
-                    last_status = "CONNECTED"
-
-                    continue
-
-                elif result == "DATA_LIMIT":
-                    print("⚠ Data Limit Exceeded")
-
-                    write_log("Data Limit Exceeded")
-
+                elif status == "CAPTIVE_PORTAL_OR_NO_INTERNET":
+                    set_state(CAPTIVE_PORTAL)
+                    app_state.current_status = "Login Required"
                     show_notification(
                         "📶 Campus WiFi Assistant",
-                        "📊 Daily Data Limit Exceeded — update your credentials to resume"
+                        f"⚠ Login Required ({active_profile.get('name')})"
                     )
 
-                    data_limit_active = True
-                    data_limit_first_seen = current_time
-                    data_limit_config_mtime = get_config_mtime()
+                last_status = status
 
-                else:
-                    print("❌ Login Failed")
+            # 4. Handle Captive Portal Login
+            if status == "CAPTIVE_PORTAL_OR_NO_INTERNET":
+                current_time = time.time()
 
-                    write_log("Portal Login Failed")
+                if data_limit_active:
+                    current_creds_mtime = get_file_mtime(CREDENTIALS_FILE)
+                    creds_updated = (
+                        current_creds_mtime is not None
+                        and data_limit_creds_mtime is not None
+                        and current_creds_mtime != data_limit_creds_mtime
+                    )
+                    timed_out = (current_time - data_limit_first_seen) > DATA_LIMIT_FALLBACK_RETRY
 
-                    show_notification(
-                        "📶 Campus WiFi Assistant",
-                        "❌ Login Failed"
-                     )
+                    if not creds_updated and not timed_out:
+                        time.sleep(interval)
+                        continue
 
-            except Exception as e:
-                print(e)
-                write_log(f"Login Error: {e}")
-                last_login_attempt = current_time
+                    print(f"[{active_profile.get('name')}] Retrying login (credentials updated or fallback timer elapsed)...")
+                    data_limit_active = False
 
-    elif status == "WIFI_DISCONNECTED":
-        app_state.current_status = "WiFi Disconnected"
+                if current_time - last_login_attempt > 45:
+                    print(f"[{active_profile.get('name')}] Initiating automated portal authentication...")
+                    result = smart_login(active_profile)
+                    last_login_attempt = current_time
 
-        show_notification(
-            "📶 Campus WiFi Assistant",
-            "❌ WiFi Disconnected"
-        )
+                    if result == "SUCCESS":
+                        app_state.current_status = "Connected"
+                        last_status = "CONNECTED"
+                        data_limit_active = False
 
-        print("✗ WiFi Disconnected")
+                    elif result == "DATA_LIMIT":
+                        app_state.current_status = "Data Limit Exceeded"
+                        data_limit_active = True
+                        data_limit_first_seen = current_time
+                        data_limit_creds_mtime = get_file_mtime(CREDENTIALS_FILE)
 
-    time.sleep(15)
+                        show_notification(
+                            "📶 Campus WiFi Assistant",
+                            f"📊 Data Limit Exceeded on {active_profile.get('name')} — update credentials to resume"
+                        )
+
+                    else:
+                        app_state.current_status = "Login Failed"
+
+            elif status == "CONNECTED":
+                app_state.current_status = "Connected"
+                set_state(INTERNET_CONNECTED)
+
+            time.sleep(interval)
+
+        except Exception as e:
+            print(f"Monitor loop error: {e}")
+            write_log(f"Monitor Loop Error: {e}")
+            time.sleep(10)
+
+
+def main():
+    print("==================================================")
+    print("      Campus WiFi Assistant (V3 Multi-Network)    ")
+    print("==================================================")
+    set_state(STARTING)
+    write_log("Campus WiFi Assistant V3 Started")
+
+    show_notification(
+        "📶 Campus WiFi Assistant",
+        "🚀 Monitoring Started (V3 Multi-Network)"
+    )
+
+    # Start Background Network Monitor thread
+    monitor_thread = threading.Thread(target=network_monitor_loop, daemon=True)
+    monitor_thread.start()
+
+    # Main thread runs the System Tray GUI Message Pump
+    start_tray()
+
+
+if __name__ == "__main__":
+    main()

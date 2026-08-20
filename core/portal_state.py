@@ -1,27 +1,25 @@
 import requests
 
+DEFAULT_VERIFICATION_URL = "http://www.msftconnecttest.com/connecttest.txt"
+DEFAULT_EXPECTED_BODY = "Microsoft Connect Test"
 
-def login_required():
+
+def login_required(verification_url=None, expected_body=None):
     """
     Returns False if real internet access is confirmed.
-    Returns True if the captive portal is still blocking traffic
-    (or the check itself fails, to be safe).
-
-    This replaces the old approach of loading the portal page and
-    looking for "Logout" text, which was unreliable because the
-    portal doesn't always show that text after a successful login.
+    Returns True if the captive portal is still intercepting traffic.
     """
+    url = verification_url or DEFAULT_VERIFICATION_URL
+    expected = expected_body or DEFAULT_EXPECTED_BODY
 
     try:
         response = requests.get(
-            "http://www.msftconnecttest.com/connecttest.txt",
+            url,
             allow_redirects=False,
             timeout=5
         )
 
-        # Microsoft's NCSI endpoint returns exactly this body when
-        # there is no captive portal intercepting traffic.
-        if response.status_code == 200 and response.text.strip() == "Microsoft Connect Test":
+        if response.status_code == 200 and expected in response.text.strip():
             return False
 
         return True

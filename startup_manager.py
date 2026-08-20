@@ -36,6 +36,8 @@ def add_to_startup():
 
     with open(destination, "w", encoding="utf-8") as f:
         f.write("@echo off\n")
+        f.write("REM Wait for the drive to finish mounting after boot\n")
+        f.write("timeout /t 15 /nobreak >nul\n")
         f.write(f'cd /d "{get_app_dir()}"\n')
         f.write(f"start \"\" {launch_command}\n")
 

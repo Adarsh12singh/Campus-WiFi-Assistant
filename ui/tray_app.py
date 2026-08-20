@@ -2,10 +2,12 @@ import pystray
 from pystray import MenuItem as item
 from PIL import Image
 import os
+import threading
 import app_state
 
 from app_paths import get_app_dir, get_resource_dir
 from ui.switch_account import open_switch_account_window
+from ui.dashboard import open_dashboard
 from startup_manager import add_to_startup, remove_from_startup, is_in_startup
 
 
@@ -28,31 +30,20 @@ def resume_monitoring(icon, item):
     print("Monitoring Resumed")
 
 
+def open_dashboard_window(icon, item):
+    threading.Thread(target=open_dashboard, daemon=True).start()
+
+
 def open_logs(icon, item):
-
     try:
-
         os.startfile(os.path.join(get_app_dir(), "logs.txt"))
-
     except Exception as e:
-
         print(f"Unable To Open Logs: {e}")
-
-
-def open_config(icon, item):
-
-    try:
-
-        os.startfile(os.path.join(get_app_dir(), "config.json"))
-
-    except Exception as e:
-
-        print(f"Unable To Open Config: {e}")
 
 
 def switch_account(icon, item):
     try:
-        open_switch_account_window()
+        threading.Thread(target=open_switch_account_window, daemon=True).start()
     except Exception as e:
         print(f"Unable To Open Switch Account Window: {e}")
 
@@ -75,7 +66,8 @@ def startup_checked(item):
 
 
 def get_status(item):
-    return f"Status: {app_state.current_status}"
+    prof_text = f" ({app_state.current_profile_name})" if app_state.current_profile_name else ""
+    return f"Status: {app_state.current_status}{prof_text}"
 
 
 def exit_app(icon, item):
@@ -86,15 +78,17 @@ def exit_app(icon, item):
 
 
 def start_tray():
+    from ui.icon_holder import set_global_icon
+
     menu = pystray.Menu(
         item(get_status, lambda icon, item: None, enabled=False),
-        item("Pause Monitoring", pause_monitoring),
-        item("Resume Monitoring", resume_monitoring),
-        item("Switch Account", switch_account),
+        item("📊 Open Dashboard", open_dashboard_window),
+        item("🔑 Switch Account / Credentials", switch_account),
+        item("⏸ Pause Monitoring", pause_monitoring, visible=lambda item: app_state.monitoring_enabled),
+        item("▶ Resume Monitoring", resume_monitoring, visible=lambda item: not app_state.monitoring_enabled),
         item("Start with Windows", toggle_startup, checked=startup_checked),
-        item("Open Logs", open_logs),
-        item("Open Config", open_config),
-        item("Exit", exit_app),
+        item("📜 Open Logs", open_logs),
+        item("❌ Exit", exit_app),
     )
 
     icon = pystray.Icon(
@@ -103,5 +97,5 @@ def start_tray():
         "Campus WiFi Assistant",
         menu=menu,
     )
-
+    set_global_icon(icon)
     icon.run()
